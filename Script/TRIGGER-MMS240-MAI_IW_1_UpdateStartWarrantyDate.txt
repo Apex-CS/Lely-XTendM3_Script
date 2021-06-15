@@ -1,0 +1,443 @@
+import java.text.DateFormat
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+
+public class MAI_IW_1_UpdateStartWarrantyDate extends ExtendM3Trigger {
+  private final ProgramAPI program
+  private final InteractiveAPI interactive
+  private final DatabaseAPI database
+  private final SessionAPI session
+  private int commDate=0
+  private int FinalWrntyDate=0
+  private int currentCompany=0
+  private String itemNumber=""
+  private String serialNumber=""
+  private String warrantyType=""
+  private String currentDivi=""
+  private int PTWA = 0
+  private int WAMN = 0
+  boolean update=false
+  private List<Hashtable>MILOSWlist=null;
+  private List<Hashtable>MILOTWlineslist=null;
+  
+  public MAI_IW_1_UpdateStartWarrantyDate(ProgramAPI program, InteractiveAPI interactive, DatabaseAPI database, SessionAPI session) {
+        this.program = program
+        this.interactive = interactive 
+        this.database = database
+        this.session = session
+  }
+  
+  public void main() {
+        MILOSWlist=new ArrayList<Hashtable>()
+        
+        itemNumber = interactive.display.fields.WWITNO
+        serialNumber = interactive.display.fields.WWSERN
+        String commdate1 = interactive.display.fields.WKCMDD
+        String option = interactive.getMode()
+        String sessionvalue = session.parameters.get("MMS240_"+itemNumber+"_"+serialNumber)
+       
+        
+        if (!commdate1.trim().isEmpty() && option.trim() == "change" && !sessionvalue.equals(commdate1)){
+          session.parameters.put("MMS240_"+itemNumber+"_"+serialNumber, null)
+          currentCompany = (Integer)program.getLDAZD().CONO
+          DBAction query = database.table("MILOIN").index("00").selection("LICONO", "LIITNO", "LISERN","LICMDD").build()
+          DBContainer container = query.getContainer()
+          container.set("LICONO", currentCompany)
+          container.set("LIITNO", itemNumber)
+          container.set("LISERN", serialNumber)
+          
+          if (query.read(container)) {
+          commDate = container.get("LICMDD")
+          }
+          
+          ExpressionFactory expression = database.getExpressionFactory("MILOSW")
+          expression = expression.eq("SWSTRT", "")
+          DBAction query1 = database.table("MILOSW").index("00").matching(expression).selectAllFields().build()
+          DBContainer container1 = query1.getContainer()
+          container1.set("SWCONO", currentCompany)
+          container1.set("SWITNO", itemNumber)
+          container1.set("SWSERN", serialNumber)
+          query1.readAll(container1, 3, getAllRecords)
+          
+          MILOSWlist.each{
+          value->
+          Hashtable temprecord = value
+          
+          getLineData(temprecord)
+          InsertNewHeadRecord(temprecord)
+          InsertNewLine()
+          DeleteHeadRecord(temprecord)
+          DeleteOldLine()
+          
+          }
+        }
+  }
+  
+  public void InsertNewHeadRecord(Hashtable temprecord){
+        currentCompany = Integer.parseInt(temprecord.get("SWCONO").toString())
+        warrantyType   = temprecord.get("SWWATP")
+        getWarrantyType(currentCompany, warrantyType)
+       
+        if(PTWA==1){
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
+        LocalDate today = LocalDate.parse(Integer.toString(commDate),formatter);
+        //adding day to the localdate
+        LocalDate tomorrow = today.plusDays(WAMN);
+        FinalWrntyDate=Integer.parseInt(tomorrow.format(formatter))
+      } 
+      
+        else if (PTWA==2){
+		    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
+		    LocalDate today = LocalDate.parse(Integer.toString(commDate),formatter);
+		    //adding week to the localdate
+		    LocalDate Weeks = today.plusWeeks(WAMN);
+        FinalWrntyDate=Integer.parseInt(Weeks.format(formatter))
+      } 
+      
+        else if(PTWA==3){
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
+        LocalDate today = LocalDate.parse(Integer.toString(commDate),formatter);
+		    //adding month to the localdate
+		    LocalDate Months = today.plusMonths(WAMN);
+        FinalWrntyDate=Integer.parseInt(Months.format(formatter))
+      }
+      
+        else{
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
+        LocalDate today = LocalDate.parse(Integer.toString(commDate),formatter);
+		    //adding one year to the localdate
+		    LocalDate Years = today.plusYears(WAMN);
+        FinalWrntyDate=Integer.parseInt(Years.format(formatter))
+      } 
+      
+        DBAction query1 = database.table("MILOSW").index("00").selectAllFields().build()
+        DBContainer container1 = query1.getContainer()
+        container1.set("SWCONO",Integer.parseInt(temprecord.get("SWCONO").toString()))
+        container1.set("SWITNO",temprecord.get("SWITNO"))
+        container1.set("SWSERN",temprecord.get("SWSERN"))
+        container1.set("SWWADT", FinalWrntyDate)
+        container1.set("SWSTRT",temprecord.get("SWSTRT"))
+        container1.set("SWSUFI",temprecord.get("SWSUFI"))
+        container1.set("SWBIRT",Integer.parseInt(temprecord.get("SWBIRT").toString()))
+        container1.set("SWWAGR",temprecord.get("SWWAGR"))
+        container1.set("SWWAL1",Double.parseDouble(temprecord.get("SWWAL1").toString()))
+        container1.set("SWWAL2",Double.parseDouble(temprecord.get("SWWAL2").toString()))
+        container1.set("SWWAL3",Double.parseDouble(temprecord.get("SWWAL3").toString()))
+        container1.set("SWWAL4",Double.parseDouble(temprecord.get("SWWAL4").toString()))
+        container1.set("SWRORC",Integer.parseInt(temprecord.get("SWRORC").toString()))
+        container1.set("SWRORN",temprecord.get("SWRORN"))
+        container1.set("SWRORL",Integer.parseInt(temprecord.get("SWRORL").toString()))
+        container1.set("SWSTAT",temprecord.get("SWSTAT"))
+        container1.set("SWCRTS",Integer.parseInt(temprecord.get("SWCRTS").toString()))
+        container1.set("SWCRTN",Integer.parseInt(temprecord.get("SWCRTN").toString()))
+        container1.set("SWPRN1",temprecord.get("SWPRN1"))
+        container1.set("SWSTR1",temprecord.get("SWSTR1"))
+        container1.set("SWSUF1",temprecord.get("SWSUF1"))
+        container1.set("SWTXID",Integer.parseInt(temprecord.get("SWTXID").toString()))
+        container1.set("SWRGDT",Integer.parseInt(temprecord.get("SWRGDT").toString()))
+        container1.set("SWRGTM",Integer.parseInt(temprecord.get("SWRGTM").toString()))
+        container1.set("SWLMDT",Integer.parseInt(temprecord.get("SWLMDT").toString()))
+        container1.set("SWCHNO",Integer.parseInt(temprecord.get("SWCHNO").toString()))
+        container1.set("SWCHID",temprecord.get("SWCHID"))
+        container1.set("SWRORX",Integer.parseInt(temprecord.get("SWRORX").toString()))
+        container1.set("SWLMTS",Long.parseLong(temprecord.get("SWLMTS").toString()))
+        container1.set("SWSTDT",commDate)
+        container1.set("SWMES1",temprecord.get("SWMES1"))
+        container1.set("SWMES2",temprecord.get("SWMES2"))
+        container1.set("SWMES3",temprecord.get("SWMES3"))
+        container1.set("SWMES4",temprecord.get("SWMES4"))
+        container1.set("SWWATP",temprecord.get("SWWATP"))
+        container1.set("SWGWED",Integer.parseInt(temprecord.get("SWGWED").toString()))
+        container1.set("SWAECN",temprecord.get("SWAECN"))
+        container1.set("SWMSEQ",Integer.parseInt(temprecord.get("SWMSEQ").toString()))
+        container1.set("SWDDTE",Integer.parseInt(temprecord.get("SWDDTE").toString()))
+        Closure<?> insertCallBack = {}  
+        query1.insert(container1,insertCallBack)
+      
+  }
+  
+  public void InsertNewLine(){
+    
+        MILOTWlineslist.each{
+        value-> Hashtable temprecord=value
+        
+        DBAction query1 = database.table("MILOTW").index("00").selectAllFields().build()
+        DBContainer container1 = query1.getContainer()  
+        container1.set("AZCONO",Integer.parseInt(temprecord.get("AZCONO").toString()))
+        container1.set("AZDIVI",temprecord.get("AZDIVI"))
+        container1.set("AZITNO",temprecord.get("AZITNO"))
+        container1.set("AZSERN",temprecord.get("AZSERN"))
+        container1.set("AZWADT",FinalWrntyDate)
+        container1.set("AZEXCL",Integer.parseInt(temprecord.get("AZEXCL").toString()))
+        container1.set("AZALNT",Integer.parseInt(temprecord.get("AZALNT").toString()))
+        container1.set("AZACWA",Integer.parseInt(temprecord.get("AZACWA").toString()))
+        container1.set("AZCUPL",temprecord.get("AZCUPL"))
+        container1.set("AZADID",temprecord.get("AZADID"))
+        container1.set("AZIDEN",temprecord.get("AZIDEN"))
+        container1.set("AZIDTO",temprecord.get("AZIDTO"))
+        container1.set("AZAQUA",Double.parseDouble(temprecord.get("AZAQUA").toString()))
+        container1.set("AZUQTY",Double.parseDouble(temprecord.get("AZUQTY").toString()))
+        container1.set("AZFDAT",Integer.parseInt(temprecord.get("AZFDAT").toString()))
+        container1.set("AZTDAT",Integer.parseInt(temprecord.get("AZTDAT").toString()))
+        container1.set("AZYEAR",Integer.parseInt(temprecord.get("AZYEAR").toString()))
+        container1.set("AZMONT",Integer.parseInt(temprecord.get("AZMONT").toString()))
+        container1.set("AZDAYS",Integer.parseInt(temprecord.get("AZDAYS").toString()))
+        container1.set("AZASCA",Integer.parseInt(temprecord.get("AZASCA").toString()))
+        container1.set("AZTXID",Integer.parseInt(temprecord.get("AZTXID").toString()))
+        container1.set("AZRGDT",Integer.parseInt(temprecord.get("AZRGDT").toString()))
+        container1.set("AZRGTM",Integer.parseInt(temprecord.get("AZRGTM").toString()))
+        container1.set("AZLMDT",Integer.parseInt(temprecord.get("AZLMDT").toString()))
+        container1.set("AZCHNO",Integer.parseInt(temprecord.get("AZCHNO").toString()))
+        container1.set("AZCHID",temprecord.get("AZCHID"))
+        container1.set("AZLMTS",Long.parseLong(temprecord.get("AZLMTS").toString()))
+        container1.set("AZCFGL",temprecord.get("AZCFGL"))
+        container1.set("AZPRNO",temprecord.get("AZPRNO"))
+        container1.set("AZSTRT",temprecord.get("AZSTRT"))
+        container1.set("AZSUFI",temprecord.get("AZSUFI"))
+        container1.set("AZMPGM",temprecord.get("AZMPGM"))
+        container1.set("AZYEA1",Integer.parseInt(temprecord.get("AZYEA1").toString()))
+        container1.set("AZMON1",Integer.parseInt(temprecord.get("AZMON1").toString()))
+        container1.set("AZPYN1",temprecord.get("AZPYN1"))
+        container1.set("AZAAG1",temprecord.get("AZAAG1"))
+        container1.set("AZYEA2",Integer.parseInt(temprecord.get("AZYEA2").toString()))
+        container1.set("AZMON2",Integer.parseInt(temprecord.get("AZMON2").toString()))
+        container1.set("AZPYN2",temprecord.get("AZPYN2"))
+        container1.set("AZAAG2",temprecord.get("AZAAG2"))
+        container1.set("AZMWTP",Integer.parseInt(temprecord.get("AZMWTP").toString()))
+        container1.set("AZIDE1",temprecord.get("AZIDE1"))
+        container1.set("AZMES1",temprecord.get("AZMES1"))
+        container1.set("AZMES2",temprecord.get("AZMES2"))
+        container1.set("AZMES3",temprecord.get("AZMES3"))
+        container1.set("AZMES4",temprecord.get("AZMES4"))
+        container1.set("AZMVA1",Double.parseDouble(temprecord.get("AZMVA1").toString()))
+        container1.set("AZMVA2",Double.parseDouble(temprecord.get("AZMVA2").toString()))
+        container1.set("AZMVA3",Double.parseDouble(temprecord.get("AZMVA3").toString()))
+        container1.set("AZMVA4",Double.parseDouble(temprecord.get("AZMVA4").toString()))
+        container1.set("AZWATP",temprecord.get("AZWATP"))
+        container1.set("AZCOND",temprecord.get("AZCOND"))
+        container1.set("AZSTAT",temprecord.get("AZSTAT"))
+        container1.set("AZCNCT",temprecord.get("AZCNCT"))
+        container1.set("AZWCOV",Double.parseDouble(temprecord.get("AZWCOV").toString()))
+        container1.set("AZSLEM",Double.parseDouble(temprecord.get("AZSLEM").toString()))
+        container1.set("AZCLYN",Integer.parseInt(temprecord.get("AZCLYN").toString()))
+        container1.set("AZCLPR",temprecord.get("AZCLPR"))
+        container1.set("AZCAML",Double.parseDouble(temprecord.get("AZCAML").toString()))
+        container1.set("AZCLLA",Double.parseDouble(temprecord.get("AZCLLA").toString()))
+        container1.set("AZCSTO",Integer.parseInt(temprecord.get("AZCSTO").toString()))
+        container1.set("AZRTPR",Integer.parseInt(temprecord.get("AZRTPR").toString()))
+        container1.set("AZASBO",Integer.parseInt(temprecord.get("AZASBO").toString()))
+        container1.set("AZSTTR",temprecord.get("AZSTTR"))
+        container1.set("AZIDTY",Integer.parseInt(temprecord.get("AZIDTY").toString()))
+        container1.set("AZIDTP",Integer.parseInt(temprecord.get("AZIDTP").toString()))
+        Closure<?> insertCallBack = {}  
+        query1.insert(container1,insertCallBack)
+      }
+}
+  
+    public void DeleteHeadRecord(Hashtable temprecord){
+        DBAction query1 = database.table("MILOSW").index("00").selectAllFields().build()
+        DBContainer container1 = query1.getContainer()
+        String ItemNumber = temprecord.get("SWITNO");
+        String SerialNumber = temprecord.get("SWSERN");
+        String WarrantyDate = temprecord.get("SWWADT");
+        String WarrantyType = temprecord.get("SWWATP");
+        container1.set("SWCONO",Integer.parseInt(temprecord.get("SWCONO").toString().replace(" ","")))
+        container1.set("SWITNO",ItemNumber.trim().replace(' ',''))
+        container1.set("SWSERN",SerialNumber.trim().replace(' ',''))
+        container1.set("SWWADT",Integer.parseInt(WarrantyDate.trim().replace(" ","")))
+        container1.set("SWSTRT","") 
+        container1.set("SWSUFI","") 
+        container1.set("SWWATP",WarrantyType.trim().replace(' ',''))
+        boolean test1=query1.readAllLock(container1,7,deleteCallBack)
+  }
+  
+        Closure<?> deleteCallBack = {LockedResult result->
+         result.delete()
+      
+  }
+  
+   public void DeleteOldLine(){
+        MILOTWlineslist.each{
+        value-> Hashtable temprecord=value
+        
+        DBAction query1 = database.table("MILOTW").index("00").selectAllFields().build()
+        DBContainer container1 = query1.getContainer()
+        container1.set("AZCONO", Integer.parseInt(temprecord.get("AZCONO").toString()))
+        container1.set("AZITNO", temprecord.get("AZITNO"))
+        container1.set("AZSERN", temprecord.get("AZSERN"))
+        container1.set("AZWADT", Integer.parseInt(temprecord.get("AZWADT").toString()))
+        container1.set("AZSTRT", temprecord.get("AZSTRT"))
+        container1.set("AZSUFI", temprecord.get("AZSUFI"))
+        container1.set("AZWATP", temprecord.get("AZWATP"))
+        container1.set("AZCNCT", temprecord.get("AZCNCT"))
+        container1.set("AZEXCL", Integer.parseInt(temprecord.get("AZEXCL").toString()))
+        container1.set("AZALNT", Integer.parseInt(temprecord.get("AZALNT").toString()))
+        container1.set("AZIDTY", Integer.parseInt(temprecord.get("AZIDTY").toString()))
+        container1.set("AZIDEN", temprecord.get("AZIDEN"))
+        container1.set("AZPRNO", temprecord.get("AZPRNO"))
+        container1.set("AZCFGL", temprecord.get("AZCFGL"))
+        boolean test2=query1.readAllLock(container1,14,deleteCallBack1)
+      
+   }
+}
+  
+        Closure<?> deleteCallBack1 = {LockedResult Delresult->
+        Delresult.delete()
+      
+   }
+  
+  
+  public void getWarrantyType(int currentCompany, String warrantyType){
+   
+        DBAction query2 = database.table("MIWRRT").index("00").selectAllFields().build()
+        DBContainer container2 = query2.getContainer()
+        container2.set("AZCONO", currentCompany)
+        container2.set("AZDIVI", "")
+        container2.set("AZWATP", warrantyType)
+    
+      if (query2.read(container2)) {
+        PTWA = container2.getInt("AZPTWA")
+        WAMN = container2.getInt("AZWAMN")
+         
+      }
+   
+  }
+  public void getLineData(Hashtable temprecord){
+        MILOTWlineslist=new ArrayList<Hashtable>()
+        
+        DBAction query1 = database.table("MILOTW").index("00").selectAllFields().build()
+        DBContainer container1 = query1.getContainer()
+        container1.set("AZCONO", Integer.parseInt(temprecord.get("SWCONO").toString()))
+        container1.set("AZITNO", temprecord.get("SWITNO"))
+        container1.set("AZSERN", temprecord.get("SWSERN"))
+        container1.set("AZWADT", Integer.parseInt(temprecord.get("SWWADT").toString()))
+        container1.set("AZSTRT", temprecord.get("SWSTRT"))
+        container1.set("AZSUFI", temprecord.get("SWSUFI"))
+        container1.set("AZWATP", temprecord.get("SWWATP"))
+        query1.readAll(container1, 7, getlinerecords)
+    
+  }
+        Closure<?> getlinerecords = { DBContainer getlinerecords ->
+        Hashtable<String,String> linerecords = new Hashtable<String,String>()
+        
+        linerecords.put("AZCONO",getlinerecords.get("AZCONO").toString())
+        linerecords.put("AZDIVI",getlinerecords.get("AZDIVI").toString())
+        linerecords.put("AZITNO",getlinerecords.get("AZITNO").toString())
+        linerecords.put("AZSERN",getlinerecords.get("AZSERN").toString())
+        linerecords.put("AZWADT",getlinerecords.get("AZWADT").toString())
+        linerecords.put("AZEXCL",getlinerecords.get("AZEXCL").toString())
+        linerecords.put("AZALNT",getlinerecords.get("AZALNT").toString())
+        linerecords.put("AZACWA",getlinerecords.get("AZACWA").toString())
+        linerecords.put("AZCUPL",getlinerecords.get("AZCUPL").toString())
+        linerecords.put("AZADID",getlinerecords.get("AZADID").toString())
+        linerecords.put("AZIDEN",getlinerecords.get("AZIDEN").toString())
+        linerecords.put("AZIDTO",getlinerecords.get("AZIDTO").toString())
+        linerecords.put("AZAQUA",getlinerecords.get("AZAQUA").toString())
+        linerecords.put("AZUQTY",getlinerecords.get("AZUQTY").toString())
+        linerecords.put("AZFDAT",getlinerecords.get("AZFDAT").toString())
+        linerecords.put("AZTDAT",getlinerecords.get("AZTDAT").toString())
+        linerecords.put("AZYEAR",getlinerecords.get("AZYEAR").toString())
+        linerecords.put("AZMONT",getlinerecords.get("AZMONT").toString())
+        linerecords.put("AZDAYS",getlinerecords.get("AZDAYS").toString())
+        linerecords.put("AZASCA",getlinerecords.get("AZASCA").toString())
+        linerecords.put("AZTXID",getlinerecords.get("AZTXID").toString())
+        linerecords.put("AZRGDT",getlinerecords.get("AZRGDT").toString())
+        linerecords.put("AZRGTM",getlinerecords.get("AZRGTM").toString())
+        linerecords.put("AZLMDT",getlinerecords.get("AZLMDT").toString())
+        linerecords.put("AZCHNO",getlinerecords.get("AZCHNO").toString())
+        linerecords.put("AZCHID",getlinerecords.get("AZCHID").toString())
+        linerecords.put("AZLMTS",getlinerecords.get("AZLMTS").toString())
+        linerecords.put("AZCFGL",getlinerecords.get("AZCFGL").toString())
+        linerecords.put("AZPRNO",getlinerecords.get("AZPRNO").toString())
+        linerecords.put("AZSTRT",getlinerecords.get("AZSTRT").toString())
+        linerecords.put("AZSUFI",getlinerecords.get("AZSUFI").toString())
+        linerecords.put("AZMPGM",getlinerecords.get("AZMPGM").toString())
+        linerecords.put("AZYEA1",getlinerecords.get("AZYEA1").toString())
+        linerecords.put("AZMON1",getlinerecords.get("AZMON1").toString())
+        linerecords.put("AZPYN1",getlinerecords.get("AZPYN1").toString())
+        linerecords.put("AZAAG1",getlinerecords.get("AZAAG1").toString())
+        linerecords.put("AZYEA2",getlinerecords.get("AZYEA2").toString())
+        linerecords.put("AZMON2",getlinerecords.get("AZMON2").toString())
+        linerecords.put("AZPYN2",getlinerecords.get("AZPYN2").toString())
+        linerecords.put("AZAAG2",getlinerecords.get("AZAAG2").toString())
+        linerecords.put("AZMWTP",getlinerecords.get("AZMWTP").toString())
+        linerecords.put("AZIDE1",getlinerecords.get("AZIDE1").toString())
+        linerecords.put("AZMES1",getlinerecords.get("AZMES1").toString())
+        linerecords.put("AZMES2",getlinerecords.get("AZMES2").toString())
+        linerecords.put("AZMES3",getlinerecords.get("AZMES3").toString())
+        linerecords.put("AZMES4",getlinerecords.get("AZMES4").toString())
+        linerecords.put("AZMVA1",getlinerecords.get("AZMVA1").toString())
+        linerecords.put("AZMVA2",getlinerecords.get("AZMVA2").toString())
+        linerecords.put("AZMVA3",getlinerecords.get("AZMVA3").toString())
+        linerecords.put("AZMVA4",getlinerecords.get("AZMVA4").toString())
+        linerecords.put("AZWATP",getlinerecords.get("AZWATP").toString())
+        linerecords.put("AZCOND",getlinerecords.get("AZCOND").toString())
+        linerecords.put("AZSTAT",getlinerecords.get("AZSTAT").toString())
+        linerecords.put("AZCNCT",getlinerecords.get("AZCNCT").toString())
+        linerecords.put("AZWCOV",getlinerecords.get("AZWCOV").toString())
+        linerecords.put("AZSLEM",getlinerecords.get("AZSLEM").toString())
+        linerecords.put("AZCLYN",getlinerecords.get("AZCLYN").toString())
+        linerecords.put("AZCLPR",getlinerecords.get("AZCLPR").toString())
+        linerecords.put("AZCAML",getlinerecords.get("AZCAML").toString())
+        linerecords.put("AZCLLA",getlinerecords.get("AZCLLA").toString())
+        linerecords.put("AZCSTO",getlinerecords.get("AZCSTO").toString())
+        linerecords.put("AZRTPR",getlinerecords.get("AZRTPR").toString())
+        linerecords.put("AZASBO",getlinerecords.get("AZASBO").toString())
+        linerecords.put("AZSTTR",getlinerecords.get("AZSTTR").toString())
+        linerecords.put("AZIDTY",getlinerecords.get("AZIDTY").toString())
+        linerecords.put("AZIDTP",getlinerecords.get("AZIDTP").toString())
+        MILOTWlineslist.add(linerecords)
+}
+  
+        Closure<?> UpdatecallBack = { LockedResult lockedresult ->
+        lockedresult.set("SWSTDT", commDate)
+        lockedresult.update()
+      }
+  
+        Closure<?> getAllRecords = { DBContainer getEachRecord ->
+        Hashtable<String,String> tablerecords = new Hashtable<String,String>()
+      
+        tablerecords.put("SWCONO",getEachRecord.get("SWCONO").toString())
+        tablerecords.put("SWITNO",getEachRecord.get("SWITNO").toString())
+        tablerecords.put("SWSERN",getEachRecord.get("SWSERN").toString())
+        tablerecords.put("SWWADT",getEachRecord.get("SWWADT").toString())
+        tablerecords.put("SWSTRT",getEachRecord.get("SWSTRT").toString())
+        tablerecords.put("SWSUFI",getEachRecord.get("SWSUFI").toString())
+        tablerecords.put("SWBIRT",getEachRecord.get("SWBIRT").toString())
+        tablerecords.put("SWWAGR",getEachRecord.get("SWWAGR").toString())
+        tablerecords.put("SWWAL1",getEachRecord.get("SWWAL1").toString())
+        tablerecords.put("SWWAL2",getEachRecord.get("SWWAL2").toString())
+        tablerecords.put("SWWAL3",getEachRecord.get("SWWAL3").toString())
+        tablerecords.put("SWWAL4",getEachRecord.get("SWWAL4").toString())
+        tablerecords.put("SWRORC",getEachRecord.get("SWRORC").toString())
+        tablerecords.put("SWRORN",getEachRecord.get("SWRORN").toString())
+        tablerecords.put("SWRORL",getEachRecord.get("SWRORL").toString())
+        tablerecords.put("SWSTAT",getEachRecord.get("SWSTAT").toString())
+        tablerecords.put("SWCRTS",getEachRecord.get("SWCRTS").toString())
+        tablerecords.put("SWCRTN",getEachRecord.get("SWCRTN").toString())
+        tablerecords.put("SWPRN1",getEachRecord.get("SWPRN1").toString())
+        tablerecords.put("SWSTR1",getEachRecord.get("SWSTR1").toString())
+        tablerecords.put("SWSUF1",getEachRecord.get("SWSUF1").toString())
+        tablerecords.put("SWTXID",getEachRecord.get("SWTXID").toString())
+        tablerecords.put("SWRGDT",getEachRecord.get("SWRGDT").toString())
+        tablerecords.put("SWRGTM",getEachRecord.get("SWRGTM").toString())
+        tablerecords.put("SWLMDT",getEachRecord.get("SWLMDT").toString())
+        tablerecords.put("SWCHNO",getEachRecord.get("SWCHNO").toString())
+        tablerecords.put("SWCHID",getEachRecord.get("SWCHID").toString())
+        tablerecords.put("SWRORX",getEachRecord.get("SWRORX").toString())
+        tablerecords.put("SWLMTS",getEachRecord.get("SWLMTS").toString())
+        tablerecords.put("SWSTDT",getEachRecord.get("SWSTDT").toString())
+        tablerecords.put("SWMES1",getEachRecord.get("SWMES1").toString())
+        tablerecords.put("SWMES2",getEachRecord.get("SWMES2").toString())
+        tablerecords.put("SWMES3",getEachRecord.get("SWMES3").toString())
+        tablerecords.put("SWMES4",getEachRecord.get("SWMES4").toString())
+        tablerecords.put("SWWATP",getEachRecord.get("SWWATP").toString())
+        tablerecords.put("SWGWED",getEachRecord.get("SWGWED").toString())
+        tablerecords.put("SWAECN",getEachRecord.get("SWAECN").toString())
+        tablerecords.put("SWMSEQ",getEachRecord.get("SWMSEQ").toString())
+        tablerecords.put("SWDDTE",getEachRecord.get("SWDDTE").toString())
+        MILOSWlist.add(tablerecords)
+}
+}

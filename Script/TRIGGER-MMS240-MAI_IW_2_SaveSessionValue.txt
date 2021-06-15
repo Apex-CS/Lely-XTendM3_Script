@@ -1,0 +1,31 @@
+public class MAI_IW_2_SaveSessionValue extends ExtendM3Trigger {
+  private final ProgramAPI program
+  private final InteractiveAPI interactive
+  private final DatabaseAPI database
+  private final SessionAPI session
+  
+  public MAI_IW_2_SaveSessionValue(ProgramAPI program, InteractiveAPI interactive, DatabaseAPI database, SessionAPI session) {
+        this.program = program
+        this.interactive = interactive 
+        this.database = database
+        this.session = session
+    
+  }
+  
+  public void main() {
+    
+    commdatecompare()
+       
+  }
+  
+  public void commdatecompare(){
+        String item_session = interactive.display.fields.WWITNO
+        String serialno_session = interactive.display.fields.WWSERN
+        String oldcomdate = interactive.display.fields.WKCMDD
+
+        if (session.parameters.get("MMS240_"+item_session+"_"+serialno_session)==null){        
+        session.parameters.put("MMS240_"+item_session+"_"+serialno_session, oldcomdate)
+        }
+  }
+    
+}
