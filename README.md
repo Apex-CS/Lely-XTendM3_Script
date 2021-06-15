@@ -1,2 +1,4 @@
 # Lely-XTendM3_Script
-Trigger Warranty (Warranty Install Date)
+### Trigger Warranty (Warranty Install Date)
+* When a user changes the Commission Date (CMDD) on MMS240/K for a particular item/serial number combination in change mode that Commission Date should get updated into Start Date field of MOS390 program (MILOSW) and also based on the warranty type defined in MOS710 the warranty date should be calculated  and updated in MOS390 and MILOSW table.  
+* When a user changes the Commission Date (CMDD) on MMS240/K for a particular item/serial number combination in change mode that Commission Date should get updated into Start Date field of MOS390 program (MILOSW) and also based on the warranty type defined in MOS710 the warranty date should be calculated  and updated in MOS390 and MILOSW table. This should be only for the records with the structure type blank and service type blank in MOS390 (MILOSW).
