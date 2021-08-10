@@ -1,0 +1,51 @@
+/**
+* Name: MMS240_MAI_IW_2_SaveSessionValue
+* Type : ExtendM3Trigger
+* Description: Save values in session when the MMS240/K panel loads
+* M3 Program / Panel: MMS240/K
+*
+* Created By: Avaap ACE India
+* Author: Shashank Malali
+*
+* History:
+* 20210616  script created
+* 
+*
+*/
+
+public class MAI_IW_2_SaveSessionValue extends ExtendM3Trigger {
+  private final ProgramAPI program
+  private final InteractiveAPI interactive
+  private final DatabaseAPI database
+  private final SessionAPI session
+  
+  public MAI_IW_2_SaveSessionValue(ProgramAPI program, InteractiveAPI interactive, DatabaseAPI database, SessionAPI session) {
+        this.program = program
+        this.interactive = interactive 
+        this.database = database
+        this.session = session
+    
+  }
+  
+  public void main() {
+    
+    commDateCompare()
+       
+  }
+  
+  /**
+   * Get Commision date, Item number and Serial number from MMS240/K 
+   * when Panel loads and save in session
+   */
+   
+  public void commDateCompare(){
+        String item_session = interactive.display.fields.WWITNO
+        String serialno_session = interactive.display.fields.WWSERN
+        String oldcomdate = interactive.display.fields.WKCMDD
+
+        if (session.parameters.get("MMS240_"+item_session+"_"+serialno_session)==null){        
+        session.parameters.put("MMS240_"+item_session+"_"+serialno_session, oldcomdate)
+        }
+  }
+    
+}
