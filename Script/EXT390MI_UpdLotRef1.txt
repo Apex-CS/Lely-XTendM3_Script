@@ -1,0 +1,176 @@
+/** Updates Lot Reference 1 in M3 OCLINE/OIS390
+ * @author Shashank Malali
+ * @param CONO Company
+ * @param WHLO Warehouse
+ * @param REPN Receiving number
+ * @param RELI order line number
+ * @param BREF Lot Reference 1
+ * @return REPN Receiving number Updated
+ * @return RELI Order line number Updated
+ */
+ 
+class UpdLotRef1 extends ExtendM3Transaction {
+    MIAPI mi
+    ProgramAPI program
+    DatabaseAPI database
+    LoggerAPI logger
+    UtilityAPI utility
+
+    /** Function Constructor => Updates Information in M3
+     */
+    UpdLotRef1(MIAPI mi, ProgramAPI program, DatabaseAPI database, LoggerAPI logger, UtilityAPI utility) {
+        this.mi = mi
+        this.program = program
+        this.database = database
+        this.logger = logger
+        this.utility = utility
+    }
+
+    /** Entry point called by M3 for this MI <br>
+     * Worker for function that performs action <br>
+     * Reads MI inputs and returns a result or error message to the MI caller
+     */
+    //@OverRide
+    void main() {
+        //Load the values from the MI Call.  Default CONO 
+        Integer iCONO = (Integer) mi.in.get("CONO", program.LDAZD.CONO)
+        Long iREPN  = (Long) mi.in.get("REPN")
+        Long iRELI  = (Long) mi.in.get("RELI")
+        String iWHLO = (String) mi.in.get("WHLO")
+
+        //Add Null Check for iBREF
+        String iBREF = (String) mi.in.get("BREF")
+
+        if(iBREF == null) {
+            //Lot Ref 1 was set as a required parameter, so I
+            //think it needed a null check, 
+            
+            String oErrorText = "Lot Ref 1 cannot be null."
+            mi.error(oErrorText)
+            return
+        }
+
+        //Check if Record Exists
+        DBContainer OCLINERecord = getOCLINERecord(iCONO, iWHLO, iREPN, iRELI)
+
+        //Record not Found, return error
+        if (OCLINERecord == null) {
+            String oErrorText = "Record not Found (" + iCONO + "|" + iWHLO + "|" + iREPN + "|" + iRELI +")"
+            mi.error(oErrorText)
+            return
+        } else {
+            //Record Found, do work
+            updateOCLINE(OCLINERecord)
+        }
+    }
+
+    /**
+     * Pull OCLINE record to verify the key exists<br>
+     * @param CONO Company
+     * @param WHLO Warehouse
+     * @param REPN Receiving Number
+     * @param RELI Order line number
+     * @return Either the Record, or Null
+     */
+    DBContainer getOCLINERecord(Integer CONO, String WHLO, Long REPN, Long RELI) {
+        //ODCONO	Company	              Asc
+        //ODWHLO	Warehouse             Asc
+        //ODREPN	Receiving number      Asc
+        //ODRELI	Order line Number     Asc
+
+        DBAction query = database.table("OCLINE").index("00").selection("ODCONO", "ODWHLO", "ODREPN", "ODRELI", "ODBREF").build()
+        DBContainer container = query.createContainer()
+
+        container.set("ODCONO", CONO)
+        container.set("ODWHLO", WHLO)
+        container.set("ODREPN", REPN)
+        container.set("ODRELI", RELI)
+
+        boolean found = query.read(container)
+
+        if (found) {
+            return container
+        }
+        else{
+        return null }
+    }
+
+    /**
+     * Updates the OCLINE Record <br>
+     * @param containerOCLINE Database container with record to update
+     */
+    void updateOCLINE(DBContainer containerOCLINE) {
+        //ODCONO	Company	              Asc
+        //ODWHLO	Warehouse             Asc
+        //ODREPN	Receiving number      Asc
+        //ODRELI	Order line Number     Asc
+
+        //Debug Message
+        DBAction query = database.table("OCLINE").index("00").selection("ODCONO", "ODWHLO", "ODREPN", "ODRELI", "ODBREF").build()
+        DBContainer container = query.createContainer()
+        container.set("ODCONO", containerOCLINE.get("ODCONO"))
+        container.set("ODWHLO", containerOCLINE.get("ODWHLO"))
+        container.set("ODREPN", containerOCLINE.get("ODREPN"))
+        container.set("ODRELI", containerOCLINE.get("ODRELI"))
+        container.set("ODBREF", containerOCLINE.get("ODBREF"))
+
+        logger.debug("Inputs: " + container)
+
+        boolean result = query.readLock(container, updateOCLINECallBack)
+        String REPN = containerOCLINE.get("ODREPN").toString()
+        String RELI = containerOCLINE.get("ODRELI").toString()
+
+        if (result) {
+            logger.debug("Result: successful")
+           
+            mi.outData.put("REPN", REPN)
+            mi.outData.put("RELI", RELI)
+            mi.write() // Retuning the MI Results to the client
+            return
+        } else {
+            String oTX40 = "Record is not found (" +containerOCLINE.get("ODCONO")+"|"+containerOCLINE.get("ODWHLO")+"|" +REPN + "|" + RELI+")"
+            logger.debug("Result: " + oTX40)
+            mi.error(oTX40) // Retuning the MI Results to the client as an error
+            return
+        }
+
+    }
+
+    /**
+     * Closure for OCLINE Update <br>
+     * Locks the Record, writes the actual update. <br>
+     * If all values are blank, no update performed. <br>
+     */
+    Closure<?> updateOCLINECallBack = {
+        LockedResult OCLINERecord ->
+        //ODCONO	Company	              Asc
+        //ODWHLO	Warehouse             Asc
+        //ODREPN	Receiving number      Asc
+        //ODRELI	Order line Number     Asc
+
+        //Values
+        String iBREF = (String) mi.in.get("BREF")
+
+        //Set Values
+        int LMDT = (Integer) utility.call("DateUtils", "currentDateY8AsInt", null)
+        //long LMTS = (Long) utility.call("DateUtils", "currentEpochSeconds", null)
+        OCLINERecord.set("ODLMDT", LMDT)
+       // OCLINERecord.set("MGLMTS", LMTS)
+        OCLINERecord.set("ODCHNO", OCLINERecord.getInt("ODCHNO") + 1)
+        OCLINERecord.set("ODCHID", program.LDAZD.RESP)
+
+        Boolean updateRecord = false
+        logger.debug("Inputs: " + OCLINERecord)
+
+        //If Blank, don't update
+        if (iBREF.trim().length() > 0) {
+            OCLINERecord.set("ODBREF", iBREF)
+            updateRecord = true
+        }
+
+        if (updateRecord) {
+            OCLINERecord.update()
+        }
+    }
+}
+
